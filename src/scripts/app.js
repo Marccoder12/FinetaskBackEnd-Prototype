@@ -23,6 +23,10 @@ app.get("/api/debug/users", (req, res) => {
     const users = db.prepare("SELECT id, name, email, createdAt FROM users").all();
     res.json({ ok: true, users });
 })
+app.get("/api/debug/welcome", (req, res) => {
+    const msg = "Welcome to the server it works actually!"
+    res.json({ ok: true, message: msg });
+})
 
 app.use((err, req, res, next) => {
     console.error(err);
