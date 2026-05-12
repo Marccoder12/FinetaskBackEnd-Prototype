@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task DashBoard</title>
+    <style>
+        body{
+            font-family: Arial, sans-serif;
+            padding: 16px;
+        }
+        .row{
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .card{
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            padding: 12px;
+            width: 280px;
+        }
+        .muted{
+            opacity: 0.75;
+            font-size: 12px;
+        }
+        .pill{
+            display: inline-block;
+            padding: 2px 8px;
+            border: 1px solid #aaa;
+            border-radius: 999px;
+            font-size: 12px;
+        }
+
+        form{
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 12px;
+            margin: 12px 0;
+            max-width: 520px;
+        }
+        input, select, button{
+            padding: 8px;
+            margin: 6px 0;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        button{
+            cursor: pointer;
+        }
+
+        .topbar{
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .danger{
+            border-color: #d66;
+        }
+        .actions{
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .actions button{
+            width: auto;
+        }
+
+        #msg{
+            margin: 10px 0;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="topbar">
+        <h1>Tasks</h1>
+        <div class="actions">
+            <button id="refreshBtn" type="button">Refresh</button>
+            <button id="clearBtn" type="button" class="danger">Clear All</button>
+            <button type="button" id="logoutBtn">Logout</button>
+        </div>
+    </div>
+    
+    <div id="msg" class="muted"></div>
+
+    <form id="createForm">
+        <h3>Create Task</h3>
+        <label>
+            Title
+            <input id="title" name="title" placeholder="e.g. Pay for data" required/>
+        </label>
+        <label>
+            Amount
+            <input id="amount" name="amount" type="number" step="0.01" placeholder="e.g. 1500" required/>
+        </label>
+
+        <button type="submit">Create</button>
+    </form>
+
+    <div id="list" class="row"></div>
+
+    <script>
+        const msg = document.getElementById("msg");
+        const list = document.getElementById("list");
+        const token = localStorage.getItem("token");
+
+        if(!token){
+            location.href = "/login.html";
+        }
+
+        async function api(path, options = {}) {
+  // Always use absolute paths like "/api/tasks"
+  if (!path.startsWith("/")) path = "/" + path;
+
+  const token = localStorage.getItem("token");
+
+//   console.log("API CALL:", path);
+//   console.log("TOKEN:", token);
+
+  const headers = {
+    ...(options.headers || {}),
+    "Content-Type": "application/json",
+  };
+
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
+  let res;
+  try {
+    res = await fetch(path, { ...options, headers });
+  } catch (err) {
+    console.error("FETCH FAILED (network error):", err);
+    throw err; // this is a real network-level failure
+  }
+
+  const contentType = res.headers.get("content-type") || "";
+  let text = "";
+  let json = null;
+
+  try {
+    text = await res.text();
+    if (contentType.includes("application/json")) {
+      json = JSON.parse(text);
+    }
+  } catch (err) {
+    console.warn("RESPONSE PARSE FAILED:", err);
+  }
+
+//   console.log("API STATUS:", res.status);
+//   console.log("API BODY:", text);
+
+  return { res, text, json };
+}
+
+        function setMsg(text){
+            msg.textContent = text || "";
+        }
+
+        function renderTasks(tasks){
+            list.innerHTML = "";
+
+            if(!tasks || tasks.length === 0){
+                const empty = document.createElement("div");
+                    empty.className = "muted";
+                    empty.textContent = "No tasks yet. Create one above.";
+                    list.appendChild(empty);
+                    return;
+            }
+
+            for(const t of tasks){
+                const card = document.createElement("div");
+                card.className = "card";
+
+                const title = document.createElement("div");
+                title.innerHTML = `<strong>${escapeHtml(t.title)}<strong>`;
+                    card.appendChild(title);
+
+                const amount = document.createElement("div");
+                amount.textContent = `₦${Number(t.amount).toLocaleString()}`;
+                card.appendChild(amount);
+
+                const meta = document.createElement("div");
+                meta.className = "muted";
+                meta.textContent = new Date(t.createAt).toLocaleString();
+                card.appendChild(meta);
+
+                const status = document.createElement("div");
+                status.style.marginTop = "8px";
+                status.innerHTML = `<span class="pil">${escapeHtml(t.status)}</span>`;
+                card.appendChild(status);
+
+                const actions = document.createElement("div");
+                actions.className = "actions";
+
+                const delBtn = document.createElement("button");
+                delBtn.type = "button";
+                delBtn.textContent = "Delete";
+                delBtn.className = "danger";
+                delBtn.onclick = () => deleteTask(t.id);
+
+                actions.appendChild(delBtn);
+                card.appendChild(actions);
+
+                list.appendChild(card);
+            }
+        }
+
+        function escapeHtml(s){
+            return String(s)
+            .replaceAll("&", "&amp")
+            .replaceAll("<", "&lt")
+            .replaceAll(">", "&gt")
+            .replaceAll('"', "&quot")
+            .replaceAll("'", "&#039");
+        }
+
+        async function loadTasks(){
+            setMsg("Loading Tasks...");
+            const { res, json, text } = await api("/api/tasks");
+
+            if(res.status === 401){
+                //token invalid/expired
+                localStorage.removeItem("token");
+                location.href = "/login.html";
+                return;
+            }
+
+            if(!res.ok){
+                setMsg(`Failed to load tasks (${res.status}):\n${text}`);
+                return;
+            }
+
+            renderTasks(json.tasks);
+            setMsg("");
+        }
+
+        async function createTask(title, amount){
+        setMsg("Creating task...");
+            const { res, json, text } = await api("/api/tasks", {method: "POST", body: JSON.stringify({title, amount})});
+            // console.log(JSON.stringify(json));
+            if(!res.ok){
+                setMsg(`Create failed (${res.status}):\n${text}`);
+                return;
+            }
+
+            setMsg("Created.");
+            await loadTasks();
+            setTimeout(() => setMsg(""), 800);
+        }
+
+        async function deleteTask(taskId){
+            setMsg("Deleting task...");
+            const {res, text } = await api(`/api/tasks/${taskId}`, { method: "DELETE"});
+
+            if(!res.ok){
+                setMsg(`Delete failed (${res.status}):\n${text}`);
+                return;
+            }
+
+            setMsg("Deleted.");
+            await loadTasks();
+            setTimeout(() => setMsg(""), 800);
+        }
+
+        async function clearAll(){
+            if(!confirm("Clear ALL your tasks? This cannot be undone.")) return;
+
+            setMsg("Clearing tasks...");
+            const { res, text } = await api("/api/tasks", { method: "DELETE" });
+
+            if(!res.ok){
+                setMsg(`Clear failed (${res.status}):\n${text}`);
+                return;
+            }
+
+            setMsg("Cleared.");
+            await loadTasks();
+            setTimeout(() => setMsg(""), 800);
+        }
+
+        document.getElementById("createForm").addEventListener("submit", (e) => {
+            e.preventDefault();
+            const title = document.getElementById("title").value.trim();
+            const amount = Number(document.getElementById("amount").value);
+
+            if(!title) return setMsg("Title is required.");
+            if(!Number.isFinite(amount) || amount <= 0) return setMsg("Amount must be a positive number.");
+
+            // console.log(title, amount)
+            createTask(title, amount);
+            e.target.reset();
+        });
+
+        document.getElementById("refreshBtn").onclick = loadTasks;
+
+        document.getElementById("clearBtn").onclick = clearAll;
+
+        document.getElementById("logoutBtn").onclick = () => {
+            localStorage.removeItem("token");
+            location.href = "/login.html";
+        };
+        
+        loadTasks();
+    </script>
+</body>
+</html>

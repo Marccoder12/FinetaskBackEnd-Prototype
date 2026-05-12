@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login</title>
+</head>
+<body>
+    <h2>Log In</h2>
+
+    <input id="email" placeholder="email"/>
+    <input id="password" placeholder="password" type="password"/>
+    <button id="btn">Login</button>
+
+    <pre id="out"></pre>
+
+    <script>
+        const out = document.getElementById("out");
+
+        document.getElementById("btn").onclick = async () => {
+            out.textContent = "Logging in...";
+
+            try {
+                const res = await fetch("api/auth/login", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        email: document.getElementById("email").value,
+                        password: document.getElementById("password").value
+                    })
+                });
+
+                const data = await res.json(); // parse JSON properly
+
+                if(!res.ok){
+                    out.textContent = JSON.stringify(data, null, 2);
+                    return;
+                }
+                if(!data.token){
+                    out.textContent = "Login succeeded but no token was returned.";
+                    console.log("LOGIN RESPONSE", data);
+                    console.log("LOGIN RESPONSE TOKEN", data.user.token);
+                    return;
+                }
+
+                // SAVE TOKEN
+                localStorage.setItem("token", data.token);
+
+                //REDIRECT TO DASHBOARD
+                window.location.href = "/dashboard.html";
+            } catch (err) {
+                console.error("LOGIN FETCH ERROR", err);
+                out.textContent = "Login failed. Check console.";
+            }
+        };
+    </script>
+</body>
+</html>

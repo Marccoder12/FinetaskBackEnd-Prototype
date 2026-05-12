@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>test</title>
+</head>
+<body>
+    <form class="signUForm">
+        <input type="text" name="name">
+        <input type="text" name="email">
+        <input type="text" name="password">
+        <button id="btn">Test Register</button>
+    </form>
+    <script>
+        const formEl = document.querySelector(".signUForm");
+        formEl.addEventListener('submit', event =>{
+            event.preventDefault();
+            const formData = new FormData(formEl);
+            const fname = formData.get("name");
+            const ftemail = formData.get("email");
+            const ftpass = formData.get("password");
+            
+            document.getElementById("btn").onclick = async() => {
+                try{
+                const res = await fetch("/api/auth/register", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json"},
+                    body: JSON.stringify({
+                        name: fname,
+                        email: ftemail,
+                        password: ftpass
+                    })
+                });
+    
+                const text = await res.text();
+                console.log(res.status, text);
+                alert(text);
+                }
+                catch(err) {
+                    console.error("FETCH ERROR:", err);
+                    alert("Fetch failed, Check console. ");
+                }
+            };
+        })
+    </script>
+</body>
+</html>
